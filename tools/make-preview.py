@@ -68,6 +68,7 @@ def inline(text):
         return "\x00%d\x00" % (len(codes) - 1)
 
     text = re.sub(r"`([^`]+)`", stash, text)
+    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", r'<img src="\2" alt="\1">', text)
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
 
