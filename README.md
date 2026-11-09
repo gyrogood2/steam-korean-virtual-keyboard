@@ -104,7 +104,7 @@ L1 표시 전환   R1 한/영   한
 - Steam 폴더의 `.cef-enable-remote-debugging` 표시 파일도 지웁니다
 - **Steam 프로그램 자체는 건드리지 않습니다**
 
-## 만든 방식 (개발자용)
+## 만든 방식
 
 <details>
 <summary>펼치기</summary>
