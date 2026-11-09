@@ -25,8 +25,9 @@ namespace SteamOskKorean
                 text.AppendLine("정상입니다.");
                 text.AppendLine("Steam에서 가상 키보드를 열어 확인하세요.");
                 text.AppendLine();
-                text.AppendLine("※ 일반 데스크톱 채팅창이 아니라");
-                text.AppendLine("   Big Picture 모드나 게임패드 입력에서 뜹니다.");
+                text.AppendLine("※ 가상 키보드가 열려 있으면 됩니다.");
+                text.AppendLine("   Big Picture·게임패드뿐 아니라");
+                text.AppendLine("   일반 데스크톱 채팅창에서도 동작합니다.");
             }
             else if (!steamRunning)
             {
