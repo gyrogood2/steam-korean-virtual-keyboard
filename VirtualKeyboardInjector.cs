@@ -16,18 +16,26 @@ namespace SteamOskKorean
         // Letters are forwarded to the local server, which sends real VK events.
         private static string BuildKeyHookExpression(string token)
         {
-            return "(function(){var I=window.SteamClient&&window.SteamClient.Input;" +
+            // The token stays inline in the installed function so the sweep can
+            // tell its own hook from one left behind by a killed process.
+            return "(function(){try{var I=window.SteamClient&&window.SteamClient.Input;" +
                 "if(!I||typeof I.ControllerKeyboardSendText!=='function')return 'skip';" +
-                "if(I.__sixKeyHook)return 'already';" +
+                "var stale=false;" +
+                "if(I.__sixKeyHook){" +
+                "if(String(I.ControllerKeyboardSendText).indexOf('" + token + "')>=0)return 'already';" +
+                "if(I.__sixKeyOriginal)I.ControllerKeyboardSendText=I.__sixKeyOriginal;" +
+                "I.__sixKeyHook=false;stale=true;}" +
                 "var o=I.ControllerKeyboardSendText;" +
-                "I.ControllerKeyboardSendText=function(t){" +
-                "if(typeof t==='string'&&t.length===1&&/[A-Za-z]/.test(t)){" +
-                "try{fetch('http://127.0.0.1:8793/key?t=" + token + "&c='+encodeURIComponent(t))" +
-                ".then(function(r){if(!r.ok)o.call(I,t);})" +
-                ".catch(function(){o.call(I,t);});}catch(e){o.call(I,t);}" +
+                "I.ControllerKeyboardSendText=function(x){" +
+                "if(typeof x==='string'&&x.length===1&&/[A-Za-z]/.test(x)){" +
+                "try{fetch('http://127.0.0.1:8793/key?t=" + token + "&c='+encodeURIComponent(x))" +
+                ".then(function(r){if(!r.ok)o.call(I,x);})" +
+                ".catch(function(){o.call(I,x);});}catch(e){o.call(I,x);}" +
                 "return;}" +
-                "return o.call(I,t);};" +
-                "I.__sixKeyHook=true;I.__sixKeyOriginal=o;return 'installed';})()";
+                "return o.call(I,x);};" +
+                "I.__sixKeyHook=true;I.__sixKeyOriginal=o;" +
+                "return stale?'refreshed':'installed';" +
+                "}catch(e){return 'e';}})()";
         }
 
         private const string RestoreKeyHookExpression =
@@ -56,7 +64,7 @@ namespace SteamOskKorean
         {
             _cdp = cdp;
             _payload = payload;
-            _installedCheck = BuildInstalledCheck(payload);
+            _installedCheck = BuildInstalledCheck(payload, token);
             _keyHookExpression = BuildKeyHookExpression(token);
         }
 
@@ -210,6 +218,10 @@ namespace SteamOskKorean
                 {
                     Log.Info("key hook " + Describe(target));
                 }
+                else if (result == "refreshed")
+                {
+                    Log.Info("key hook refreshed " + Describe(target));
+                }
             }
             catch (Exception exception)
             {
@@ -244,7 +256,7 @@ namespace SteamOskKorean
             return target.Title.Length > 0 ? target.Title : target.Id;
         }
 
-        private static string BuildInstalledCheck(string payload)
+        private static string BuildInstalledCheck(string payload, string token)
         {
             Match match = Regex.Match(payload, @"var VERSION = (\d+)");
             if (!match.Success)
@@ -252,8 +264,11 @@ namespace SteamOskKorean
                 return "(window.__sixUi ? 'u' : '')";
             }
 
+            // The version alone is not enough: a payload injected by a previous
+            // process carries a dead token and must be replaced.
             return "(window.__sixUi && window.__sixUi.version === "
-                 + match.Groups[1].Value + " ? 'u' : '')";
+                 + match.Groups[1].Value
+                 + " && window.__sixUi.token === '" + token + "' ? 'u' : '')";
         }
     }
 }

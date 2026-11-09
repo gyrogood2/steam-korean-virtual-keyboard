@@ -1,10 +1,13 @@
 (function(){
-  var VERSION = 84;
+  var VERSION = 85;
+  var TOKEN = '__SIX_TOKEN__';
   var out = [];
 
   // ---- labels: only on the virtual keyboard page (input is never touched)
   if (document.querySelector('[data-key="VKMove"],[data-key="VKPaste"],[data-key="SwitchKeys_Steam"]')) {
-    if (window.__sixUi && window.__sixUi.version === VERSION) {
+    // A previous run may have left its UI behind. Its token is baked into the
+    // fetch URLs and dies with the old process, so reinstall when it differs.
+    if (window.__sixUi && window.__sixUi.version === VERSION && window.__sixUi.token === TOKEN) {
       out.push('ui:already');
     } else {
       if (window.__sixUiCleanup) { try { window.__sixUiCleanup(); } catch (e) {} }
@@ -229,7 +232,7 @@
     syncState();
     relabel();
 
-    window.__sixUi = { version: VERSION };
+    window.__sixUi = { version: VERSION, token: TOKEN };
     window.__sixUiCleanup = function () {
       try { mo.disconnect(); } catch (e) {}
       clearInterval(timer);
