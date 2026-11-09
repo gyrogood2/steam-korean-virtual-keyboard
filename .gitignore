@@ -1,0 +1,23 @@
+# 빌드 산출물
+*.exe
+*.pdb
+
+# 실행 로그
+*.log
+
+# 배포/릴리스 산출물
+dist/
+*.zip
+
+# 아이콘 미리보기 (tools/make-icon.py가 생성)
+tools/icon-preview.png
+
+# Python 캐시
+__pycache__/
+*.pyc
+
+# 로컬 README 미리보기
+README-preview.html
+
+# 화면 캡처 임시 파일
+preview-check*.png
