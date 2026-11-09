@@ -41,9 +41,13 @@ Steam은 이 파일이 있으면 켜질 때 **다른 프로그램이 접근할 �
 
 1. [Releases](../../releases)에서 최신 `SteamKoreanKeyboard-*.zip` 다운로드
 2. 압축을 풀고 `install.cmd` 실행 → UAC 창에서 **예**
-3. Steam을 평소처럼 실행하고, 가상 키보드를 열어 사용
+3. 바탕화면의 **`Steam (Korean)`** 바로가기 실행
+   - Steam과 앱이 함께 실행됩니다
+   - Steam이 이미 켜져 있었다면 재시작해 주세요
 
-설치 위치: `C:\Program Files (x86)\Steam\steam-osk-korean`
+설치 위치: `<Steam 폴더>\steam-osk-korean` (기본: `C:\Program Files (x86)\Steam\steam-osk-korean`)
+
+설치 폴더에서 직접 실행할 때: **`SteamKoreanKeyboard.exe`** (트레이 아이콘)
 
 ### 포터블 (파일 하나)
 
