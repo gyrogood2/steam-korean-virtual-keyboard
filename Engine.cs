@@ -59,7 +59,12 @@ namespace SteamOskKorean
 
         public void Start(AppMode mode)
         {
-            Stop();
+            // Stop() also restores the injected UI, which costs a network round
+            // trip. Skip it on the very first start so launch stays instant.
+            if (_running)
+            {
+                Stop();
+            }
 
             lock (_sync)
             {

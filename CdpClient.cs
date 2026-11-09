@@ -139,7 +139,7 @@ namespace SteamOskKorean
             var targets = new List<CdpTarget>();
 
             var request = (HttpWebRequest)WebRequest.Create(url);
-            request.Timeout = Config.CdpConnectTimeoutMs;
+            request.Timeout = Config.CdpListTimeoutMs;
             request.Proxy = null;
 
             using (var response = (HttpWebResponse)request.GetResponse())
@@ -190,10 +190,12 @@ namespace SteamOskKorean
 
         private static bool LooksLikeCdpList(object[] items)
         {
-            // An empty list is still a valid CDP reply; a list of scalars is not.
+            // An empty array is not proof of Steam: another service can answer
+            // "[]" on port 8080. Steam always exposes at least one target
+            // (SharedJSContext), so retry the next address and probe again.
             if (items.Length == 0)
             {
-                return true;
+                return false;
             }
 
             foreach (var item in items)
