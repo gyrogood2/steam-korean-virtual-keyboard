@@ -27,7 +27,10 @@ namespace SteamOskKorean
 
                 if (!DebugSetup.IsReady())
                 {
-                    DebugSetup.TryStartElevated();
+                    if (!DebugSetup.TryStartElevated())
+                    {
+                        Log.Warn("elevation cancelled; debug marker was not created");
+                    }
                 }
 
                 string payload = LoadPayload();
@@ -102,7 +105,9 @@ namespace SteamOskKorean
                 }
             }
 
-            return AppMode.Off;
+            // Start in the useful mode even when the exe is launched directly.
+            // The tray menu can still switch to 수동 or Off.
+            return AppMode.Full;
         }
 
         private static string LoadPayload()

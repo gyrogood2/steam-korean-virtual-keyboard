@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -13,6 +14,7 @@ namespace SteamOskKorean
         private readonly ToolStripMenuItem _pureItem;
         private readonly ToolStripMenuItem _offItem;
         private readonly ToolStripMenuItem _startupItem;
+        private readonly Timer _startupCheck;
 
         public TrayContext(Engine engine, AppMode initialMode)
         {
@@ -42,6 +44,14 @@ namespace SteamOskKorean
             _startupItem.Click += delegate { ToggleStartup(); };
             menu.Items.Add(_startupItem);
 
+            var statusItem = new ToolStripMenuItem("연결 상태 확인");
+            statusItem.Click += delegate { ShowStatus(); };
+            menu.Items.Add(statusItem);
+
+            var logItem = new ToolStripMenuItem("로그 열기");
+            logItem.Click += delegate { OpenLog(); };
+            menu.Items.Add(logItem);
+
             menu.Items.Add(new ToolStripSeparator());
             var exitItem = new ToolStripMenuItem("종료");
             exitItem.Click += delegate { Exit(); };
@@ -63,6 +73,14 @@ namespace SteamOskKorean
             {
                 RefreshChecks();
             }
+
+            _startupCheck = new Timer { Interval = 10000 };
+            _startupCheck.Tick += delegate
+            {
+                _startupCheck.Stop();
+                CheckConnectionOnce();
+            };
+            _startupCheck.Start();
         }
 
         private static Icon LoadIcon()
@@ -149,6 +167,62 @@ namespace SteamOskKorean
             return "Off";
         }
 
+        private void CheckConnectionOnce()
+        {
+            if (_engine.Mode == AppMode.Off)
+            {
+                return;
+            }
+
+            if (!Diagnostics.IsSteamRunning() || CdpClient.IsReachable())
+            {
+                return;
+            }
+
+            _icon.ShowBalloonTip(
+                10000,
+                "Steam 연결 대기 중",
+                "Steam이 실행 중이지만 연결 통로가 닫혀 있습니다.\n" +
+                "Steam을 완전히 종료했다가 다시 실행해 주세요.",
+                ToolTipIcon.Warning);
+        }
+
+        private void ShowStatus()
+        {
+            MessageBox.Show(
+                Diagnostics.Describe(_engine.Mode),
+                "Steam 한글 가상 키보드",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
+        private void OpenLog()
+        {
+            try
+            {
+                if (!System.IO.File.Exists(Config.LogPath))
+                {
+                    MessageBox.Show(
+                        "로그 파일이 아직 없습니다.",
+                        "Steam 한글 가상 키보드",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
+
+                Process.Start("notepad.exe", "\"" + Config.LogPath + "\"");
+            }
+            catch (Exception exception)
+            {
+                Log.Error("open log", exception);
+                MessageBox.Show(
+                    "로그 파일을 열지 못했습니다.\n" + Config.LogPath,
+                    "Steam 한글 가상 키보드",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+        }
+
         private void ToggleStartup()
         {
             try
@@ -165,6 +239,12 @@ namespace SteamOskKorean
 
         private void Exit()
         {
+            if (_startupCheck != null)
+            {
+                _startupCheck.Stop();
+                _startupCheck.Dispose();
+            }
+
             _engine.Stop();
             _icon.Visible = false;
             _icon.Dispose();

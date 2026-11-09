@@ -35,12 +35,21 @@ namespace SteamOskKorean
             "if(I&&I.__sixKeyHook){I.ControllerKeyboardSendText=I.__sixKeyOriginal;I.__sixKeyHook=false;}}" +
             "catch(e){}return 'r';})()";
 
+        private const string ProbeExpression =
+            "(document.querySelector('[data-key=VKMove],[data-key=VKPaste],[data-key=SwitchKeys_Steam]')?'1':'')";
+
         private readonly CdpClient _cdp;
         private readonly string _payload;
         private readonly string _installedCheck;
         private readonly string _keyHookExpression;
-        private readonly HashSet<string> _installedTargets = new HashSet<string>();
-        private readonly HashSet<string> _keyHookTargets = new HashSet<string>();
+        private readonly Dictionary<string, UiCheck> _uiChecks = new Dictionary<string, UiCheck>();
+        private long _lastKeyHookSweep;
+
+        private sealed class UiCheck
+        {
+            public long LastMs;
+            public bool IsOsk;
+        }
 
         public VirtualKeyboardInjector(CdpClient cdp, string payload, string token)
         {
@@ -63,6 +72,15 @@ namespace SteamOskKorean
                 return; // Steam is not running or the debug port is closed.
             }
 
+            long now = NowMs();
+            bool sweepKeyHook = now - _lastKeyHookSweep >= 5000;
+            if (sweepKeyHook)
+            {
+                _lastKeyHookSweep = now;
+            }
+
+            var live = new HashSet<string>();
+
             foreach (CdpTarget target in targets)
             {
                 if (!IsPage(target))
@@ -70,26 +88,47 @@ namespace SteamOskKorean
                     continue;
                 }
 
-                EnsureKeyHook(target);
+                live.Add(target.WebSocketUrl);
 
-                if (_installedTargets.Contains(target.WebSocketUrl))
+                if (sweepKeyHook)
+                {
+                    EnsureKeyHook(target);
+                }
+
+                UiCheck check;
+                if (!_uiChecks.TryGetValue(target.WebSocketUrl, out check))
+                {
+                    check = new UiCheck();
+                    _uiChecks[target.WebSocketUrl] = check;
+                }
+
+                // Probe new targets immediately, then back off. A reloaded OSK
+                // page keeps the same URL, so keep checking installed pages.
+                long interval = (check.IsOsk || LooksLikeOsk(target)) ? 2000 : 10000;
+                if (now - check.LastMs < interval)
                 {
                     continue;
                 }
 
+                check.LastMs = now;
+
                 try
                 {
+                    check.IsOsk = _cdp.Evaluate(target, ProbeExpression) == "1";
+                    if (!check.IsOsk)
+                    {
+                        continue;
+                    }
+
                     string installed = _cdp.Evaluate(target, _installedCheck);
                     if (installed == "u")
                     {
-                        _installedTargets.Add(target.WebSocketUrl);
                         continue;
                     }
 
                     string result = _cdp.Evaluate(target, _payload);
                     if (result != null && result.IndexOf("installed", StringComparison.Ordinal) >= 0)
                     {
-                        _installedTargets.Add(target.WebSocketUrl);
                         Log.Info(Describe(target) + " => " + result);
                     }
                 }
@@ -98,13 +137,30 @@ namespace SteamOskKorean
                     Log.Error("inject " + Describe(target), exception);
                 }
             }
+
+            if (_uiChecks.Count > live.Count)
+            {
+                var stale = new List<string>();
+                foreach (string url in _uiChecks.Keys)
+                {
+                    if (!live.Contains(url))
+                    {
+                        stale.Add(url);
+                    }
+                }
+
+                foreach (string url in stale)
+                {
+                    _uiChecks.Remove(url);
+                }
+            }
         }
 
         /// <summary>Removes the injected UI from every page.</summary>
         public void RestoreAll()
         {
-            _installedTargets.Clear();
-            _keyHookTargets.Clear();
+            _uiChecks.Clear();
+            _lastKeyHookSweep = 0;
 
             IList<CdpTarget> targets;
             try
@@ -137,21 +193,12 @@ namespace SteamOskKorean
 
         private void EnsureKeyHook(CdpTarget target)
         {
-            if (_keyHookTargets.Contains(target.WebSocketUrl))
-            {
-                return;
-            }
-
             try
             {
                 string result = _cdp.Evaluate(target, _keyHookExpression);
-                if (result == "installed" || result == "already")
+                if (result == "installed")
                 {
-                    _keyHookTargets.Add(target.WebSocketUrl);
-                    if (result == "installed")
-                    {
-                        Log.Info("key hook " + Describe(target));
-                    }
+                    Log.Info("key hook " + Describe(target));
                 }
             }
             catch (Exception exception)
@@ -160,9 +207,26 @@ namespace SteamOskKorean
             }
         }
 
+        private static long NowMs()
+        {
+            return DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+        }
+
         private static bool IsPage(CdpTarget target)
         {
             return target.Type == "page" && !string.IsNullOrEmpty(target.WebSocketUrl);
+        }
+
+        private static bool LooksLikeOsk(CdpTarget target)
+        {
+            if (string.IsNullOrEmpty(target.Title))
+            {
+                return false;
+            }
+
+            return target.Title.IndexOf("\uAC00\uC0C1", StringComparison.Ordinal) >= 0
+                || target.Title.IndexOf("Virtual", StringComparison.OrdinalIgnoreCase) >= 0
+                || target.Title.IndexOf("Keyboard", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string Describe(CdpTarget target)

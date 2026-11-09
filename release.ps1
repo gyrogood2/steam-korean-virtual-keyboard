@@ -10,10 +10,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'build failed' }
 
     $dist = Join-Path $root 'dist'
+    if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
     foreach ($file in @('SteamKoreanKeyboard.exe', 'payload.js', 'start.cmd', 'install.cmd', 'install.ps1',
-                        'uninstall.cmd', 'uninstall.ps1', 'README.md', 'LICENSE')) {
+                        'uninstall.cmd', 'uninstall.ps1', 'README.md', 'CHANGELOG.md', 'LICENSE')) {
         Copy-Item (Join-Path $root $file) $dist -Force
     }
 

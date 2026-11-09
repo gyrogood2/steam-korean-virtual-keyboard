@@ -28,9 +28,55 @@ namespace SteamOskKorean
 
         public IList<CdpTarget> GetTargets()
         {
+            Exception last = null;
+
+            foreach (string url in Config.CdpTargetListUrls)
+            {
+                try
+                {
+                    return GetTargets(url);
+                }
+                catch (Exception exception)
+                {
+                    last = exception;
+                }
+            }
+
+            throw new InvalidOperationException("Steam debug port is not reachable.", last);
+        }
+
+        /// <summary>Checks whether Steam's debug port answers on IPv4 or IPv6.</summary>
+        public static bool IsReachable()
+        {
+            foreach (string url in Config.CdpTargetListUrls)
+            {
+                try
+                {
+                    var request = (HttpWebRequest)WebRequest.Create(url);
+                    request.Timeout = 1000;
+                    request.Proxy = null;
+
+                    using (var response = (HttpWebResponse)request.GetResponse())
+                    {
+                        if (response.StatusCode == HttpStatusCode.OK)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            return false;
+        }
+
+        private static IList<CdpTarget> GetTargets(string url)
+        {
             var targets = new List<CdpTarget>();
 
-            var request = (HttpWebRequest)WebRequest.Create(Config.CdpTargetListUrl);
+            var request = (HttpWebRequest)WebRequest.Create(url);
             request.Timeout = Config.CdpConnectTimeoutMs;
             request.Proxy = null;
 

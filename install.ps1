@@ -4,20 +4,37 @@ $ErrorActionPreference = 'Stop'
 
 $src = Split-Path -Parent $PSCommandPath
 
+function Find-SteamPath {
+    param([string]$Hint)
+
+    if ($Hint) { return $Hint }
+
+    $path = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
+    if (-not $path) {
+        $path = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -ErrorAction SilentlyContinue).InstallPath
+    }
+    if (-not $path) {
+        $path = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -ErrorAction SilentlyContinue).InstallPath
+    }
+    if (-not $path) { $path = 'C:\Program Files (x86)\Steam' }
+    return $path
+}
+
 # Resolve as the current user first: after UAC elevation HKCU may belong to a
 # different account, so the path is passed through to the elevated run.
-$steam = $SteamPath
-if (-not $steam) {
-    $steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
-}
-if (-not $steam) { $steam = 'C:\Program Files (x86)\Steam' }
-$steam = $steam -replace '/', '\'
+$steam = (Find-SteamPath $SteamPath) -replace '/', '\'
 $target = Join-Path $steam 'steam-osk-korean'
 
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) {
     $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -SteamPath "' + $steam + '"'
-    Start-Process powershell -Verb RunAs -ArgumentList $arguments
+    try {
+        Start-Process powershell -Verb RunAs -ArgumentList $arguments -Wait
+    }
+    catch {
+        Write-Host ''
+        Write-Host '설치가 취소되었습니다.' -ForegroundColor Yellow
+    }
     exit
 }
 
@@ -27,6 +44,27 @@ if (-not (Test-Path (Join-Path $steam 'steam.exe'))) {
     Write-Host 'Steam을 한 번 실행한 뒤 다시 시도해 주세요.'
     exit 1
 }
+
+# Remember whether Steam already had the port open, so the final message can
+# tell the user whether a restart is required.
+$steamRunning = [bool](Get-Process steam -ErrorAction SilentlyContinue)
+$portOpen = $false
+try {
+    Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://127.0.0.1:8080/json/version' | Out-Null
+    $portOpen = $true
+}
+catch {
+    try {
+        Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 'http://[::1]:8080/json/version' | Out-Null
+        $portOpen = $true
+    }
+    catch {
+    }
+}
+
+# The exe is locked while the tray app is running.
+Get-Process SteamKoreanKeyboard -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Milliseconds 400
 
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 foreach ($file in @('SteamKoreanKeyboard.exe', 'payload.js', 'start.cmd', 'uninstall.cmd', 'uninstall.ps1', 'README.md')) {
@@ -60,4 +98,15 @@ Write-Host ''
 Write-Host 'Installed to:' $target -ForegroundColor Green
 Write-Host 'Shortcut    :' $shortcutPath -ForegroundColor Green
 Write-Host ''
-Write-Host 'Run "Steam (Korean)" from the desktop.'
+
+if ($steamRunning -and -not $portOpen) {
+    Write-Host 'Steam이 이미 실행 중입니다.' -ForegroundColor Yellow
+    Write-Host 'Steam을 트레이 메뉴에서 완전히 종료한 뒤 다시 실행해야 적용됩니다.' -ForegroundColor Yellow
+    Write-Host '(Steam은 켤 때만 표시 파일을 읽습니다.)' -ForegroundColor Yellow
+}
+elseif (-not $steamRunning) {
+    Write-Host '바탕화면의 "Steam (Korean)" 바로가기로 Steam과 앱을 함께 실행하세요.' -ForegroundColor Green
+}
+else {
+    Write-Host 'Steam 연결이 이미 열려 있습니다. 바탕화면의 "Steam (Korean)" 바로가기로 앱을 실행하세요.' -ForegroundColor Green
+}

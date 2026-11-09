@@ -6,7 +6,7 @@ namespace SteamOskKorean
     /// <summary>Central configuration values for the application.</summary>
     internal static class Config
     {
-        public const string Version = "1.0.0";
+        public const string Version = "1.0.1";
 
         public const int ControlPort = 8793;
         public const int CdpPort = 8080;
@@ -40,9 +40,20 @@ namespace SteamOskKorean
             get { return Path.Combine(BaseDirectory, LogFileName); }
         }
 
-        public static string CdpTargetListUrl
+        /// <summary>
+        /// Steam's CEF debug port usually listens on IPv4 only, but some setups
+        /// expose it on IPv6. Try IPv4 first, then fall back to IPv6.
+        /// </summary>
+        public static string[] CdpTargetListUrls
         {
-            get { return "http://[::1]:" + CdpPort + "/json/list"; }
+            get
+            {
+                return new[]
+                {
+                    "http://127.0.0.1:" + CdpPort + "/json/list",
+                    "http://[::1]:" + CdpPort + "/json/list"
+                };
+            }
         }
     }
 }

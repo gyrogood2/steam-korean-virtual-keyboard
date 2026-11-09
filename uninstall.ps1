@@ -2,18 +2,35 @@ param([string]$SteamPath)
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-$steam = $SteamPath
-if (-not $steam) {
-    $steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
+function Find-SteamPath {
+    param([string]$Hint)
+
+    if ($Hint) { return $Hint }
+
+    $path = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
+    if (-not $path) {
+        $path = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -ErrorAction SilentlyContinue).InstallPath
+    }
+    if (-not $path) {
+        $path = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -ErrorAction SilentlyContinue).InstallPath
+    }
+    if (-not $path) { $path = 'C:\Program Files (x86)\Steam' }
+    return $path
 }
-if (-not $steam) { $steam = 'C:\Program Files (x86)\Steam' }
-$steam = $steam -replace '/', '\'
+
+$steam = (Find-SteamPath $SteamPath) -replace '/', '\'
 $target = Join-Path $steam 'steam-osk-korean'
 
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) {
     $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -SteamPath "' + $steam + '"'
-    Start-Process powershell -Verb RunAs -ArgumentList $arguments
+    try {
+        Start-Process powershell -Verb RunAs -ArgumentList $arguments -Wait -ErrorAction Stop
+    }
+    catch {
+        Write-Host ''
+        Write-Host '삭제가 취소되었습니다.' -ForegroundColor Yellow
+    }
     exit
 }
 

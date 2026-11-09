@@ -92,6 +92,20 @@ namespace SteamOskKorean
             {
             }
 
+            if (string.IsNullOrEmpty(path))
+            {
+                try
+                {
+                    using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Valve\Steam"))
+                    {
+                        path = key == null ? null : key.GetValue("InstallPath") as string;
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+
             if (!string.IsNullOrEmpty(path))
             {
                 path = path.Replace('/', '\\');
