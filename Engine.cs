@@ -88,7 +88,13 @@ namespace SteamOskKorean
         {
             _running = false;
             _input.StopTracking();
-            _injector.RestoreAll();
+
+            // Restoring needs a live Steam page. When Steam is gone there is
+            // nothing to undo, and probing would only delay the exit.
+            if (Diagnostics.IsSteamRunning())
+            {
+                _injector.RestoreAll();
+            }
 
             lock (_sync)
             {

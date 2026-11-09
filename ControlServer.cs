@@ -82,7 +82,14 @@ namespace SteamOskKorean
                 using (client)
                 using (NetworkStream stream = client.GetStream())
                 {
-                    string path = ReadRequestPath(stream);
+                    bool tooLarge;
+                    string path = ReadRequestPath(stream, out tooLarge);
+                    if (tooLarge)
+                    {
+                        WriteStatus(stream, "413 Payload Too Large");
+                        return;
+                    }
+
                     if (path == null)
                     {
                         return;
@@ -94,7 +101,14 @@ namespace SteamOskKorean
                         return;
                     }
 
-                    WriteJson(stream, Dispatch(path));
+                    string route = RouteOf(path);
+                    if (!IsKnownRoute(route))
+                    {
+                        WriteStatus(stream, "404 Not Found");
+                        return;
+                    }
+
+                    WriteJson(stream, Dispatch(route, path));
                 }
             }
             catch (Exception exception)
@@ -103,9 +117,24 @@ namespace SteamOskKorean
             }
         }
 
-        private bool Dispatch(string path)
+        /// <summary>Route part of the request target, without the query string.</summary>
+        private static string RouteOf(string path)
         {
-            if (path.StartsWith("/key", StringComparison.Ordinal))
+            int query = path.IndexOf('?');
+            return query < 0 ? path : path.Substring(0, query);
+        }
+
+        private static bool IsKnownRoute(string route)
+        {
+            return route == "/state"
+                || route == "/key"
+                || route == "/hangul"
+                || route == "/flip";
+        }
+
+        private bool Dispatch(string route, string path)
+        {
+            if (route == "/key")
             {
                 char letter = GetQueryChar(path, "c");
                 if (letter != '\0')
@@ -116,12 +145,12 @@ namespace SteamOskKorean
                 return _engine.IsKorean;
             }
 
-            if (path.StartsWith("/hangul", StringComparison.Ordinal))
+            if (route == "/hangul")
             {
                 return _engine.Toggle(true);
             }
 
-            if (path.StartsWith("/flip", StringComparison.Ordinal))
+            if (route == "/flip")
             {
                 return _engine.Toggle(false);
             }
@@ -129,8 +158,9 @@ namespace SteamOskKorean
             return _engine.IsKorean;
         }
 
-        private static string ReadRequestPath(NetworkStream stream)
+        private static string ReadRequestPath(NetworkStream stream, out bool tooLarge)
         {
+            tooLarge = false;
             var buffer = new List<byte>();
             var chunk = new byte[4096];
             int headerEnd = -1;
@@ -146,6 +176,12 @@ namespace SteamOskKorean
                 for (int i = 0; i < read; i++)
                 {
                     buffer.Add(chunk[i]);
+                }
+
+                if (buffer.Count > Config.MaxRequestHeaderBytes)
+                {
+                    tooLarge = true;
+                    return null;
                 }
 
                 headerEnd = IndexOf(buffer, new byte[] { 13, 10, 13, 10 });

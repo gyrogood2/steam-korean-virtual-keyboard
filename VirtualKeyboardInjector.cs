@@ -22,8 +22,11 @@ namespace SteamOskKorean
                 "if(!I||typeof I.ControllerKeyboardSendText!=='function')return 'skip';" +
                 "var stale=false;" +
                 "if(I.__sixKeyHook){" +
-                "if(String(I.ControllerKeyboardSendText).indexOf('" + token + "')>=0)return 'already';" +
-                "if(I.__sixKeyOriginal)I.ControllerKeyboardSendText=I.__sixKeyOriginal;" +
+                "var s=String(I.ControllerKeyboardSendText);" +
+                "if(s.indexOf('" + token + "')>=0)return 'already';" +
+                // Only unwrap when the installed function is ours. If Steam has
+                // replaced it, the saved original is older than the live one.
+                "if(s.indexOf('127.0.0.1:8793')>=0&&I.__sixKeyOriginal)I.ControllerKeyboardSendText=I.__sixKeyOriginal;" +
                 "I.__sixKeyHook=false;stale=true;}" +
                 "var o=I.ControllerKeyboardSendText;" +
                 "I.ControllerKeyboardSendText=function(x){" +

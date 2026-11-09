@@ -6,10 +6,13 @@ namespace SteamOskKorean
     /// <summary>Central configuration values for the application.</summary>
     internal static class Config
     {
-        public const string Version = "1.0.4";
+        public const string Version = "1.0.5";
 
         public const int ControlPort = 8793;
         public const int CdpPort = 8080;
+
+        /// <summary>Upper bound for an HTTP request header; anything larger is refused.</summary>
+        public const int MaxRequestHeaderBytes = 8192;
 
         public const int InjectIntervalMs = 1000;
         public const int KeyPollIntervalMs = 15;
