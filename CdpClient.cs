@@ -25,31 +25,65 @@ namespace SteamOskKorean
     internal sealed class CdpClient
     {
         private static readonly JavaScriptSerializer Serializer = new JavaScriptSerializer();
+        private static string _lastEndpoint;
+
+        /// <summary>The address that last answered with a real CDP target list.</summary>
+        public static string LastEndpoint
+        {
+            get { return _lastEndpoint; }
+        }
 
         public IList<CdpTarget> GetTargets()
         {
             Exception last = null;
+            var failures = new StringBuilder();
 
             foreach (string url in Config.CdpTargetListUrls)
             {
                 try
                 {
-                    return GetTargets(url);
+                    IList<CdpTarget> targets = GetTargets(url);
+                    if (!string.Equals(_lastEndpoint, url, StringComparison.Ordinal))
+                    {
+                        _lastEndpoint = url;
+                        Log.Info("cdp " + url);
+                    }
+
+                    return targets;
                 }
                 catch (Exception exception)
                 {
                     last = exception;
+                    if (failures.Length > 0)
+                    {
+                        failures.Append("; ");
+                    }
+
+                    failures.Append(url).Append(" -> ").Append(exception.Message);
                 }
             }
 
-            throw new InvalidOperationException("Steam debug port is not reachable.", last);
+            throw new InvalidOperationException(
+                "Steam debug port is not reachable. " + failures,
+                last);
         }
 
-        /// <summary>Checks whether Steam's debug port answers on IPv4 or IPv6.</summary>
+        /// <summary>
+        /// Checks whether Steam's CDP answers on IPv4 or IPv6. A plain HTTP 200
+        /// is not enough: port 8080 may belong to an unrelated local service,
+        /// so the body has to look like a CDP version document.
+        /// </summary>
         public static bool IsReachable()
         {
-            foreach (string url in Config.CdpTargetListUrls)
+            string ignored;
+            return TryReadVersion(out ignored);
+        }
+
+        private static bool TryReadVersion(out string json)
+        {
+            foreach (string listUrl in Config.CdpTargetListUrls)
             {
+                string url = listUrl.Replace("/json/list", "/json/version");
                 try
                 {
                     var request = (HttpWebRequest)WebRequest.Create(url);
@@ -57,9 +91,12 @@ namespace SteamOskKorean
                     request.Proxy = null;
 
                     using (var response = (HttpWebResponse)request.GetResponse())
+                    using (var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
                     {
-                        if (response.StatusCode == HttpStatusCode.OK)
+                        string body = reader.ReadToEnd();
+                        if (IsCdpVersion(body))
                         {
+                            json = body;
                             return true;
                         }
                     }
@@ -69,7 +106,32 @@ namespace SteamOskKorean
                 }
             }
 
+            json = null;
             return false;
+        }
+
+        /// <summary>True for Steam's /json/version payload, false for other services.</summary>
+        private static bool IsCdpVersion(string body)
+        {
+            if (string.IsNullOrEmpty(body))
+            {
+                return false;
+            }
+
+            try
+            {
+                var fields = Serializer.DeserializeObject(body) as Dictionary<string, object>;
+                if (fields == null)
+                {
+                    return false;
+                }
+
+                return fields.ContainsKey("Browser") || fields.ContainsKey("Protocol-Version");
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private static IList<CdpTarget> GetTargets(string url)
@@ -83,10 +145,26 @@ namespace SteamOskKorean
             using (var response = (HttpWebResponse)request.GetResponse())
             using (var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
             {
-                var items = Serializer.DeserializeObject(reader.ReadToEnd()) as object[];
-                if (items == null)
+                string body = reader.ReadToEnd();
+                object[] items;
+
+                try
                 {
-                    return targets;
+                    items = Serializer.DeserializeObject(body) as object[];
+                }
+                catch (Exception exception)
+                {
+                    throw new InvalidOperationException(
+                        "Port 8080 answered, but not with CDP JSON.",
+                        exception);
+                }
+
+                // Another program may own port 8080. Anything that is not a
+                // CDP target list must fail so the next address is tried.
+                if (items == null || !LooksLikeCdpList(items))
+                {
+                    throw new InvalidOperationException(
+                        "Port 8080 answered, but not with a CDP target list.");
                 }
 
                 foreach (var item in items)
@@ -108,6 +186,26 @@ namespace SteamOskKorean
             }
 
             return targets;
+        }
+
+        private static bool LooksLikeCdpList(object[] items)
+        {
+            // An empty list is still a valid CDP reply; a list of scalars is not.
+            if (items.Length == 0)
+            {
+                return true;
+            }
+
+            foreach (var item in items)
+            {
+                var fields = item as Dictionary<string, object>;
+                if (fields != null && (fields.ContainsKey("type") || fields.ContainsKey("webSocketDebuggerUrl")))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>Evaluates an expression and returns its string value.</summary>

@@ -16,7 +16,7 @@ namespace SteamOskKorean
             var text = new StringBuilder();
             text.AppendLine("Steam 실행: " + (steamRunning ? "예" : "아니오"));
             text.AppendLine("표시 파일: " + (marker ? "있음" : "없음"));
-            text.AppendLine("디버그 포트: " + (reachable ? "연결됨" : "연결 안 됨"));
+            text.AppendLine("디버그 포트: " + DescribeEndpoint(reachable));
             text.AppendLine("현재 모드: " + ModeLabel(mode));
             text.AppendLine();
 
@@ -61,6 +61,22 @@ namespace SteamOskKorean
             {
                 return false;
             }
+        }
+
+        private static string DescribeEndpoint(bool reachable)
+        {
+            if (!reachable)
+            {
+                return "연결 안 됨";
+            }
+
+            string endpoint = CdpClient.LastEndpoint;
+            if (string.IsNullOrEmpty(endpoint))
+            {
+                return "연결됨";
+            }
+
+            return "연결됨 (" + endpoint.Replace("http://", string.Empty).Replace("/json/list", string.Empty) + ")";
         }
 
         private static string ModeLabel(AppMode mode)

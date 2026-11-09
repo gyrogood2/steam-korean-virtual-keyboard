@@ -6,7 +6,7 @@ namespace SteamOskKorean
     /// <summary>Central configuration values for the application.</summary>
     internal static class Config
     {
-        public const string Version = "1.0.1";
+        public const string Version = "1.0.2";
 
         public const int ControlPort = 8793;
         public const int CdpPort = 8080;

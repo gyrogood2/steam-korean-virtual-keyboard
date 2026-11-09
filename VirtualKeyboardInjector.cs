@@ -44,6 +44,7 @@ namespace SteamOskKorean
         private readonly string _keyHookExpression;
         private readonly Dictionary<string, UiCheck> _uiChecks = new Dictionary<string, UiCheck>();
         private long _lastKeyHookSweep;
+        private long _lastUnavailableLog;
 
         private sealed class UiCheck
         {
@@ -67,9 +68,18 @@ namespace SteamOskKorean
             {
                 targets = _cdp.GetTargets();
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                return; // Steam is not running or the debug port is closed.
+                // Steam not running or the debug port is closed. Do not spam
+                // the log once per second; a reminder every minute is enough.
+                long stamp = NowMs();
+                if (stamp - _lastUnavailableLog >= 60000)
+                {
+                    _lastUnavailableLog = stamp;
+                    Log.Warn("cdp unavailable: " + exception.Message);
+                }
+
+                return;
             }
 
             long now = NowMs();
