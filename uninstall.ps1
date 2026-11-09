@@ -1,4 +1,7 @@
-param([string]$SteamPath)
+param(
+    [string]$SteamPath,
+    [string]$DesktopPath
+)
 
 $ErrorActionPreference = 'SilentlyContinue'
 
@@ -21,9 +24,26 @@ function Find-SteamPath {
 $steam = (Find-SteamPath $SteamPath) -replace '/', '\'
 $target = Join-Path $steam 'steam-osk-korean'
 
+$desktop = $DesktopPath
+if (-not $desktop) { $desktop = [Environment]::GetFolderPath('Desktop') }
+
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $admin) {
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -SteamPath "' + $steam + '"'
+
+$canWrite = $false
+$probe = Join-Path $steam ('.osk-write-test-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType File -Path $probe -Force | Out-Null
+    Remove-Item $probe -Force
+    $canWrite = $true
+}
+catch {
+    $canWrite = $false
+}
+
+if (-not $admin -and -not $canWrite) {
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"' +
+                 ' -SteamPath "' + $steam + '"' +
+                 ' -DesktopPath "' + $desktop + '"'
     try {
         Start-Process powershell -Verb RunAs -ArgumentList $arguments -Wait -ErrorAction Stop
     }
@@ -42,7 +62,6 @@ if (Test-Path $flag) { Remove-Item $flag -Force }
 
 if (Test-Path $target) { Remove-Item $target -Recurse -Force }
 
-$desktop = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktop 'Steam (Korean).lnk'
 if (Test-Path $shortcutPath) { Remove-Item $shortcutPath -Force }
 
