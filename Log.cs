@@ -21,7 +21,7 @@ namespace SteamOskKorean
 
         public static void Error(string context, Exception exception)
         {
-            Write("ERROR", context + ": " + exception.Message);
+            Write("ERROR", context + ": " + exception.GetType().Name + ": " + exception.Message);
         }
 
         private static void Write(string level, string message)
@@ -34,12 +34,10 @@ namespace SteamOskKorean
                                 + " [" + level + "] " + message + Environment.NewLine;
                     File.AppendAllText(Config.LogPath, line, new UTF8Encoding(false));
                 }
-                catch (IOException)
+                catch (Exception)
                 {
-                    // Logging must never break the application.
-                }
-                catch (UnauthorizedAccessException)
-                {
+                    // Logging must never break the application (read-only
+                    // folders, full disks, locked files).
                 }
             }
         }

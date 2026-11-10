@@ -15,6 +15,7 @@ namespace SteamOskKorean
         public string Id { get; set; }
         public string Title { get; set; }
         public string Type { get; set; }
+        public string Url { get; set; }
         public string WebSocketUrl { get; set; }
     }
 
@@ -75,58 +76,11 @@ namespace SteamOskKorean
         /// </summary>
         public static bool IsReachable()
         {
-            string ignored;
-            return TryReadVersion(out ignored);
-        }
-
-        private static bool TryReadVersion(out string json)
-        {
-            foreach (string listUrl in Config.CdpTargetListUrls)
-            {
-                string url = listUrl.Replace("/json/list", "/json/version");
-                try
-                {
-                    var request = (HttpWebRequest)WebRequest.Create(url);
-                    request.Timeout = 1000;
-                    request.Proxy = null;
-
-                    using (var response = (HttpWebResponse)request.GetResponse())
-                    using (var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
-                    {
-                        string body = reader.ReadToEnd();
-                        if (IsCdpVersion(body))
-                        {
-                            json = body;
-                            return true;
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-                }
-            }
-
-            json = null;
-            return false;
-        }
-
-        /// <summary>True for Steam's /json/version payload, false for other services.</summary>
-        private static bool IsCdpVersion(string body)
-        {
-            if (string.IsNullOrEmpty(body))
-            {
-                return false;
-            }
-
+            var client = new CdpClient();
             try
             {
-                var fields = Serializer.DeserializeObject(body) as Dictionary<string, object>;
-                if (fields == null)
-                {
-                    return false;
-                }
-
-                return fields.ContainsKey("Browser") || fields.ContainsKey("Protocol-Version");
+                client.GetTargets();
+                return true;
             }
             catch (Exception)
             {
@@ -180,12 +134,47 @@ namespace SteamOskKorean
                         Id = GetString(fields, "id"),
                         Title = GetString(fields, "title"),
                         Type = GetString(fields, "type"),
+                        Url = GetString(fields, "url"),
                         WebSocketUrl = GetString(fields, "webSocketDebuggerUrl")
                     });
                 }
             }
 
+            // Chrome, Edge, Electron and other CEF apps also answer with a
+            // valid CDP list. Without this check the app would attach to that
+            // instance instead of Steam (port 8080 is a common choice).
+            if (!LooksLikeSteam(targets))
+            {
+                throw new InvalidOperationException(
+                    "Port 8080 answered with CDP, but not Steam's target list.");
+            }
+
             return targets;
+        }
+
+        private static bool LooksLikeSteam(IList<CdpTarget> targets)
+        {
+            foreach (CdpTarget target in targets)
+            {
+                if (string.Equals(target.Title, "SharedJSContext", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(target.Url)
+                    && target.Url.IndexOf("steamloopback.host", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(target.Title)
+                    && target.Title.IndexOf("\uAC00\uC0C1", StringComparison.Ordinal) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool LooksLikeCdpList(object[] items)

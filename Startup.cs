@@ -40,7 +40,8 @@ namespace SteamOskKorean
 
                 if (enabled)
                 {
-                    key.SetValue(ValueName, "\"" + Application.ExecutablePath + "\" --full");
+                    // --startup keeps sign-in launches quiet (no UAC/message box).
+                    key.SetValue(ValueName, "\"" + Application.ExecutablePath + "\" --full --startup");
                 }
                 else
                 {

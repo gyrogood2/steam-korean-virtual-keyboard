@@ -15,10 +15,15 @@ namespace SteamOskKorean
         private readonly ToolStripMenuItem _offItem;
         private readonly ToolStripMenuItem _startupItem;
         private readonly Timer _startupCheck;
+        private readonly SetupResult _setup;
+        private readonly bool _startupLaunch;
+        private Timer _noticeTimer;
 
-        public TrayContext(Engine engine, AppMode initialMode)
+        public TrayContext(Engine engine, AppMode initialMode, SetupResult setup, bool startupLaunch)
         {
             _engine = engine;
+            _setup = setup;
+            _startupLaunch = startupLaunch;
 
             _fullItem = CreateModeItem(
                 "자동",
@@ -74,6 +79,8 @@ namespace SteamOskKorean
                 RefreshChecks();
             }
 
+            ShowSetupNotice();
+
             _startupCheck = new Timer { Interval = 10000 };
             _startupCheck.Tick += delegate
             {
@@ -81,6 +88,47 @@ namespace SteamOskKorean
                 CheckConnectionOnce();
             };
             _startupCheck.Start();
+        }
+
+        private void ShowSetupNotice()
+        {
+            if (_setup == null || string.IsNullOrEmpty(_setup.Message))
+            {
+                return;
+            }
+
+            const string title = "Steam 한글 가상 키보드";
+            bool success = _setup.Outcome == SetupOutcome.Created || _setup.Outcome == SetupOutcome.Ready;
+
+            // At sign-in a message box would block the desktop; use a balloon.
+            if (_startupLaunch)
+            {
+                if (success)
+                {
+                    return;
+                }
+
+                _icon.ShowBalloonTip(
+                    10000,
+                    "Steam 연결 준비가 필요합니다",
+                    "트레이 메뉴 → 연결 상태 확인을 눌러 자세한 내용을 보세요.",
+                    ToolTipIcon.Warning);
+                return;
+            }
+
+            _noticeTimer = new Timer { Interval = 800 };
+            _noticeTimer.Tick += delegate
+            {
+                _noticeTimer.Stop();
+                _noticeTimer.Dispose();
+                _noticeTimer = null;
+                MessageBox.Show(
+                    _setup.Message,
+                    title,
+                    MessageBoxButtons.OK,
+                    success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            };
+            _noticeTimer.Start();
         }
 
         private static Icon LoadIcon()
@@ -190,7 +238,8 @@ namespace SteamOskKorean
         private void ShowStatus()
         {
             MessageBox.Show(
-                Diagnostics.Describe(_engine.Mode),
+                Diagnostics.Describe(_engine.Mode) + Environment.NewLine +
+                "로그: " + Config.LogPath,
                 "Steam 한글 가상 키보드",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -200,23 +249,30 @@ namespace SteamOskKorean
         {
             try
             {
-                if (!System.IO.File.Exists(Config.LogPath))
+                string path = Config.LogPath;
+                if (!System.IO.File.Exists(path) && System.IO.File.Exists(Config.LegacyLogPath))
+                {
+                    // Log written by 1.0.6 or older, next to the exe.
+                    path = Config.LegacyLogPath;
+                }
+
+                if (!System.IO.File.Exists(path))
                 {
                     MessageBox.Show(
-                        "로그 파일이 아직 없습니다.",
+                        "로그 파일이 아직 없습니다." + Environment.NewLine + path,
                         "Steam 한글 가상 키보드",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
                     return;
                 }
 
-                Process.Start("notepad.exe", "\"" + Config.LogPath + "\"");
+                Process.Start("notepad.exe", "\"" + path + "\"");
             }
             catch (Exception exception)
             {
                 Log.Error("open log", exception);
                 MessageBox.Show(
-                    "로그 파일을 열지 못했습니다.\n" + Config.LogPath,
+                    "로그 파일을 열지 못했습니다." + Environment.NewLine + Config.LogPath,
                     "Steam 한글 가상 키보드",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -243,6 +299,13 @@ namespace SteamOskKorean
             {
                 _startupCheck.Stop();
                 _startupCheck.Dispose();
+            }
+
+            if (_noticeTimer != null)
+            {
+                _noticeTimer.Stop();
+                _noticeTimer.Dispose();
+                _noticeTimer = null;
             }
 
             _engine.Stop();

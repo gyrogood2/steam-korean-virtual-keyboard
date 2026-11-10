@@ -45,13 +45,25 @@ if (-not $admin -and -not $canWrite) {
                  ' -SteamPath "' + $steam + '"' +
                  ' -DesktopPath "' + $desktop + '"'
     try {
-        Start-Process powershell -Verb RunAs -ArgumentList $arguments -Wait -ErrorAction Stop
+        $child = Start-Process powershell -Verb RunAs -ArgumentList $arguments -Wait -PassThru -ErrorAction Stop
     }
     catch {
         Write-Host ''
-        Write-Host '삭제가 취소되었습니다.' -ForegroundColor Yellow
+        Write-Host '삭제가 취소되었습니다. (관리자 권한 승인 필요)' -ForegroundColor Yellow
+        exit 1
     }
-    exit
+
+    if ($child.ExitCode -ne 0) {
+        Write-Host ''
+        Write-Host '삭제에 실패했습니다.' -ForegroundColor Red
+        Write-Host 'Steam을 완전히 종료한 뒤 다시 시도해 주세요.'
+        exit $child.ExitCode
+    }
+
+    Write-Host ''
+    Write-Host 'Uninstalled.' -ForegroundColor Yellow
+    Write-Host 'Steam files were not modified.'
+    exit 0
 }
 
 Stop-Process -Name SteamKoreanKeyboard -Force
@@ -70,3 +82,4 @@ Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' 
 Write-Host ''
 Write-Host 'Uninstalled.' -ForegroundColor Yellow
 Write-Host 'Steam files were not modified.'
+exit 0

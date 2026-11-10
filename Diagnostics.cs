@@ -37,8 +37,9 @@ namespace SteamOskKorean
             else if (!marker)
             {
                 text.AppendLine("Steam 표시 파일이 없습니다.");
-                text.AppendLine("설치를 다시 실행하거나,");
-                text.AppendLine("앱을 관리자 권한으로 한 번 실행해 주세요.");
+                text.AppendLine("Steam을 완전히 종료한 뒤");
+                text.AppendLine("바탕화면의 \"Steam (Korean)\" 바로가기로 실행하세요.");
+                text.AppendLine("(관리자 권한 없이 디버그 옵션으로 Steam을 켭니다.)");
             }
             else
             {

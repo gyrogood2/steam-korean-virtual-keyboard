@@ -55,12 +55,16 @@ namespace SteamOskKorean
         private readonly string _keyHookExpression;
         private readonly Dictionary<string, UiCheck> _uiChecks = new Dictionary<string, UiCheck>();
         private long _lastKeyHookSweep;
+        private long _lastKeyHookErrorLog;
         private long _lastUnavailableLog;
 
         private sealed class UiCheck
         {
             public long LastMs;
             public bool IsOsk;
+            public int Failures;
+            public long NextTryMs;
+            public long LastErrorLogMs;
         }
 
         public VirtualKeyboardInjector(CdpClient cdp, string payload, string token)
@@ -125,6 +129,11 @@ namespace SteamOskKorean
 
                 // Probe new targets immediately, then back off. A reloaded OSK
                 // page keeps the same URL, so keep checking installed pages.
+                if (now < check.NextTryMs)
+                {
+                    continue;
+                }
+
                 long interval = (check.IsOsk || LooksLikeOsk(target)) ? 2000 : 10000;
                 if (now - check.LastMs < interval)
                 {
@@ -136,6 +145,7 @@ namespace SteamOskKorean
                 try
                 {
                     check.IsOsk = _cdp.Evaluate(target, ProbeExpression) == "1";
+                    check.Failures = 0;
                     if (!check.IsOsk)
                     {
                         continue;
@@ -155,7 +165,16 @@ namespace SteamOskKorean
                 }
                 catch (Exception exception)
                 {
-                    Log.Error("inject " + Describe(target), exception);
+                    // Targets are created and destroyed by Steam constantly.
+                    // A closed page is not a bug: back off and log once.
+                    check.Failures++;
+                    check.NextTryMs = now + (check.Failures >= 3 ? 60000 : 10000);
+                    if (now - check.LastErrorLogMs >= 60000)
+                    {
+                        check.LastErrorLogMs = now;
+                        Log.Warn("skip " + Describe(target) + " (" + exception.GetType().Name + ": "
+                                 + exception.Message + ")");
+                    }
                 }
             }
 
@@ -228,7 +247,13 @@ namespace SteamOskKorean
             }
             catch (Exception exception)
             {
-                Log.Error("key hook " + Describe(target), exception);
+                long now = NowMs();
+                if (now - _lastKeyHookErrorLog >= 60000)
+                {
+                    _lastKeyHookErrorLog = now;
+                    Log.Warn("key hook skip " + Describe(target) + " ("
+                             + exception.GetType().Name + ": " + exception.Message + ")");
+                }
             }
         }
 

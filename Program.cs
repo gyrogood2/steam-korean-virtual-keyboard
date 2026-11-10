@@ -13,7 +13,7 @@ namespace SteamOskKorean
         {
             if (HasFlag(args, "--enable-debug"))
             {
-                DebugSetup.Run();
+                DebugSetup.Run(args);
                 return;
             }
 
@@ -25,14 +25,12 @@ namespace SteamOskKorean
                     return;
                 }
 
-                if (!DebugSetup.IsReady())
-                {
-                    if (!DebugSetup.TryStartElevated())
-                    {
-                        Log.Warn("elevation cancelled; debug marker was not created");
-                    }
-                }
+                Log.Info("start v" + Config.Version + " log=" + Config.LogPath);
 
+                // The marker is needed only while Steam starts. Failure here
+                // must never stop the tray app: start.cmd can launch Steam with
+                // the debug option, which needs no write access at all.
+                SetupResult setup = DebugSetup.EnsureReady(args);
                 string payload = LoadPayload();
                 string token = CreateToken();
                 if (payload.IndexOf(Config.TokenPlaceholder, StringComparison.Ordinal) >= 0)
@@ -55,7 +53,11 @@ namespace SteamOskKorean
 
                     Application.EnableVisualStyles();
                     Application.SetCompatibleTextRenderingDefault(false);
-                    Application.Run(new TrayContext(engine, ParseInitialMode(args)));
+                    Application.Run(new TrayContext(
+                        engine,
+                        ParseInitialMode(args),
+                        setup,
+                        HasFlag(args, "--startup")));
                 }
             }
         }

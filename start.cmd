@@ -11,10 +11,10 @@ if errorlevel 1 (
   timeout /t 10 /nobreak >nul
 )
 
-call :port_open
+call :cdp_open
 if errorlevel 1 (
   echo.
-  echo [!] Steam is running, but its debug port is closed.
+  echo [!] Steam is running, but the debug port is closed.
   echo     Steam must be fully restarted once after installation.
   echo     Close Steam from the tray menu, then run this shortcut again.
   echo.
@@ -24,9 +24,9 @@ if errorlevel 1 (
 start "" "%~dp0SteamKoreanKeyboard.exe" --full
 exit /b 0
 
-:port_open
-curl -s --max-time 2 -o nul "http://127.0.0.1:8080/json/version"
-if not errorlevel 1 exit /b 0
-curl -s --max-time 2 -o nul "http://[::1]:8080/json/version"
-if not errorlevel 1 exit /b 0
+:cdp_open
+rem A plain HTTP 200 is not enough: another local service may own port 8080.
+rem Steam's CDP version document always carries "Protocol-Version".
+curl -s --max-time 2 "http://127.0.0.1:8080/json/version" 2>nul | findstr /C:"Protocol-Version" >nul && exit /b 0
+curl -s --max-time 2 "http://[::1]:8080/json/version" 2>nul | findstr /C:"Protocol-Version" >nul && exit /b 0
 exit /b 1
